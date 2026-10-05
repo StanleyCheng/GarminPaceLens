@@ -5,7 +5,7 @@ writes an Excel export, and builds a static interactive Plotly training dashboar
 
 - Repository: [StanleyCheng/GarminPaceLens](https://github.com/StanleyCheng/GarminPaceLens)
 - Production app: [GarminPaceLens](https://garminpacelens.vercel.app)
-- Static export dashboards: [Netlify](https://mygarmin.netlify.app) and
+- Additional static deployments: [Netlify](https://mygarmin.netlify.app) and
   [GitHub Pages](https://stanleycheng.github.io/GarminPaceLens/viz/)
 
 The Vercel dashboard supports separate user accounts and on-demand imports of
