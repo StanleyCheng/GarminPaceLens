@@ -84,6 +84,18 @@ def login_email(username):
     return f"{username}@accounts.pace-explorer.invalid"
 
 
+def delete_account(supabase, user_id):
+    """Delete the Auth owner; foreign keys cascade through every app record."""
+    user_id = str(UUID(user_id))
+    try:
+        supabase.request(f"/auth/v1/admin/users/{user_id}", method="DELETE",
+                         body={"should_soft_delete": False})
+    except SupabaseError as exc:
+        if exc.status == 404:
+            raise DashboardError("This account no longer exists. Reload the page.", 404) from exc
+        raise
+
+
 def validate_garmin_credentials(username, password):
     username = username.strip() if isinstance(username, str) else ""
     if not username or len(username) > 254 or "@" not in username:
@@ -170,6 +182,28 @@ class Supabase:
                 self._remove_incomplete_account(user_id)
             raise
         return self.sign_in(username, password)
+
+    def change_app_password(self, username, current_password, new_password):
+        if not isinstance(current_password, str) or not 1 <= len(current_password) <= 128:
+            raise DashboardError("Enter your current app password.", 400)
+        if not isinstance(new_password, str) or not 10 <= len(new_password) <= 128:
+            raise DashboardError("Choose an app password with 10–128 characters.", 400)
+        try:
+            session = self.sign_in(username, current_password)
+        except DashboardError as exc:
+            if exc.status == 401:
+                raise DashboardError("Your current app password is incorrect.", 400) from exc
+            raise
+        try:
+            self.request("/auth/v1/user", method="PUT", body={"password": new_password, "current_password": current_password},
+                         privileged=False, token=session["access_token"])
+        except SupabaseError as exc:
+            if exc.code == "current_password_invalid":
+                raise DashboardError("Your current app password is incorrect.", 400) from exc
+            if exc.code in ("weak_password", "same_password"):
+                raise DashboardError("Choose a different, stronger app password with 10–128 characters.", 400) from exc
+            raise
+        return session
 
     def _remove_incomplete_account(self, user_id):
         try:

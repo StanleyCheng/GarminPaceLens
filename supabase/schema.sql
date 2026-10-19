@@ -104,6 +104,18 @@ begin
     update public.pace_garmin_connections set session_ciphertext = p_session, updated_at = now() where user_id = p_user;
 end $$;
 
+-- Password-only changes keep the last completed snapshot for the same Garmin account.
+create or replace function public.pace_update_garmin_password(p_user uuid, p_revision uuid, p_credentials text)
+returns void language plpgsql set search_path = '' as $$
+declare revision uuid;
+begin
+    select c.revision into revision from public.pace_garmin_connections c where user_id = p_user for update;
+    if revision is distinct from p_revision then raise exception 'connection_changed'; end if;
+    update public.pace_garmin_connections set credentials_ciphertext = p_credentials,
+        session_ciphertext = null, revision = gen_random_uuid(), updated_at = now() where user_id = p_user;
+    delete from public.pace_sync_jobs where user_id = p_user and status in ('running','finalizing');
+end $$;
+
 create or replace function public.pace_begin_sync(p_user uuid, p_revision uuid)
 returns jsonb language plpgsql set search_path = '' as $$
 declare job public.pace_sync_jobs; revision uuid;
@@ -187,12 +199,14 @@ $$;
 revoke execute on function public.pace_auth_attempt(text,text),
     public.pace_create_profile(uuid,text,text), public.pace_update_garmin(uuid,text),
     public.pace_save_session(uuid,text), public.pace_begin_sync(uuid,uuid),
+    public.pace_update_garmin_password(uuid,uuid,text),
     public.pace_claim_sync(uuid,uuid,uuid), public.pace_append_sync(uuid,uuid,uuid,integer,jsonb,text),
     public.pace_finish_sync(uuid,uuid,uuid,jsonb), public.pace_release_sync(uuid,uuid,uuid)
     from public, anon, authenticated;
 grant execute on function public.pace_auth_attempt(text,text),
     public.pace_create_profile(uuid,text,text), public.pace_update_garmin(uuid,text),
     public.pace_save_session(uuid,text), public.pace_begin_sync(uuid,uuid),
+    public.pace_update_garmin_password(uuid,uuid,text),
     public.pace_claim_sync(uuid,uuid,uuid), public.pace_append_sync(uuid,uuid,uuid,integer,jsonb,text),
     public.pace_finish_sync(uuid,uuid,uuid,jsonb), public.pace_release_sync(uuid,uuid,uuid)
     to service_role;

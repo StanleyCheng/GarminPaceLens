@@ -34,7 +34,9 @@ verified with a temporary test account, which was then removed.
 
 The schema enables row level security on all app tables, denies direct browser
 access, and grants the API's server role access to the required functions.
-Every API data operation also uses the signed-in user's verified ID. App
+Normal dashboard operations use the signed-in user's verified ID. Admin
+operations verify that the caller's server-managed username is `stanley`
+before looking up the selected user's profile. App
 accounts are created through the API, rather than inserted into the profile
 table manually.
 
@@ -45,6 +47,51 @@ sign-in. These aliases do not receive email. Email confirmation and email
 password recovery are intentionally absent from this username-only app.
 Keep this internal alias domain unchanged after the Garmin Pace Lens rename;
 existing accounts use it as their sign-in identity.
+
+## Account administration
+
+Every signed-in user can open **Account** to change their own app password,
+edit the Garmin login and password, or delete their own account. App password
+changes require the current password, reauthenticate the same username, and
+use Supabase's authenticated-user password update. The API refreshes that
+browser's session after a successful change. A wrong current password keeps
+the existing sign-in active. Self-service targets always come from the
+verified session, so browser-supplied user IDs cannot select another account.
+
+**Delete my account** requires typing the signed-in username exactly. It
+hard-deletes that Supabase Auth account and its related app data, clears the
+session cookies, and returns to sign-in. Cancel and Escape leave the account
+unchanged. The dialog remains open with an error if deletion fails.
+
+Sign in as `stanley` and select **Admin** in the top account navigation.
+The directory lists every app profile and the raw record count from each
+user's last completed import. **View dashboard** opens a labeled read-only
+preview while keeping Stanley signed in. **Stanley's dashboard** returns
+to Stanley's own history.
+
+The admin can set a new app sign-in password and show or change the saved
+Garmin connection password. Supabase hashes app passwords, so their original
+values cannot be retrieved. Garmin passwords are decrypted only after an
+explicit reveal request and are cleared from the form when leaving it.
+All admin responses use private, no-store caching headers.
+
+**Delete selected user** opens a confirmation dialog that requires the exact
+username. Confirming permanently deletes the Supabase Auth user with a hard
+delete. Existing foreign keys cascade that deletion through the profile,
+Garmin connection, sync jobs, import batches, and completed snapshots in the
+same database operation. Other accounts are untouched. Deleting the signed-in
+Stanley account also clears its browser session and returns to sign-in.
+The `stanley` username is reserved from public signup, including after its
+account is deleted. An owner account must be provisioned through trusted
+server administration; deleting it cannot transfer admin access to a new
+public signup.
+
+Before deploying this feature to an existing environment, reapply
+[`supabase/schema.sql`](../supabase/schema.sql). It adds the server-only
+`pace_update_garmin_password` function, bringing the function count to ten.
+The function preserves completed history, clears the saved Garmin session,
+and cancels imports using the old credentials. Revision checking prevents
+a concurrent connection change from being overwritten.
 
 ## Enter environment variables individually
 

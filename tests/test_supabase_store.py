@@ -235,6 +235,28 @@ def test_sign_in_only_uses_supabase_auth_and_returns_safe_failure(monkeypatch):
     assert error.value.status == 401 and "app-private-password" not in str(error.value)
 
 
+def test_own_password_change_reauthenticates_then_uses_user_token_not_admin_update(monkeypatch):
+    backend = Supabase()
+    calls = []
+    session = {"access_token": "fresh-private-token", "refresh_token": "fresh-private-refresh"}
+    monkeypatch.setattr(backend, "sign_in", lambda username, password: calls.append((username, password)) or session)
+    monkeypatch.setattr(backend, "request", lambda path, **kwargs: calls.append((path, kwargs)))
+    assert backend.change_app_password("runner", "current-private-password", "new-private-password") == session
+    assert calls == [("runner", "current-private-password"), ("/auth/v1/user", {
+        "method": "PUT", "body": {"password": "new-private-password", "current_password": "current-private-password"},
+        "privileged": False, "token": "fresh-private-token"})]
+
+
+@pytest.mark.parametrize("code", ["weak_password", "same_password", "current_password_invalid"])
+def test_own_password_errors_are_safe_validation_messages(monkeypatch, code):
+    backend = Supabase()
+    monkeypatch.setattr(backend, "sign_in", lambda *a: {"access_token": "private-token"})
+    monkeypatch.setattr(backend, "request", lambda *a, **k: (_ for _ in ()).throw(SupabaseError(400, code)))
+    with pytest.raises(DashboardError) as error:
+        backend.change_app_password("runner", "current-private-password", "new-private-password")
+    assert error.value.status == 400 and "private" not in str(error.value)
+
+
 def test_signup_creates_auth_user_then_encrypted_profile_and_signs_in(monkeypatch):
     owner = str(uuid4())
     backend = Supabase()

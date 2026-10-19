@@ -7,9 +7,10 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 
+from admin_api import AdminStore
 from dashboard_api import import_garmin_session, read_dashboard, refresh_step, start_refresh
 from supabase_store import (DashboardError, Supabase, SupabaseError, UserStore,
-                            normalize_username, require_configuration,
+                            delete_account, normalize_username, require_configuration,
                             validate_garmin_credentials)
 
 
@@ -72,7 +73,16 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         def get():
             identity = self._identity()
-            self._reply(200, read_dashboard(UserStore(self.supabase, identity["id"]), identity))
+            query = parse_qs(urlsplit(self.path).query)
+            action = query.get("action", [""])[0]
+            if action in ("admin-users", "admin-dashboard"):
+                admin = AdminStore(self.supabase, identity)
+                result = admin.users() if action == "admin-users" else admin.dashboard(query.get("user_id", [None])[0])
+                self._reply(200, result)
+            elif action:
+                raise DashboardError("Unknown request.", 400)
+            else:
+                self._reply(200, read_dashboard(UserStore(self.supabase, identity["id"]), identity))
         self._run(get)
 
     def do_POST(self):
@@ -98,6 +108,8 @@ class handler(BaseHTTPRequestHandler):
                 password = body.get("password")
                 if not isinstance(password, str) or len(password) > 128:
                     raise DashboardError("Enter your app password.", 400)
+                if action == "signup" and username == "stanley":
+                    raise DashboardError("That username is reserved for the app owner.", 403)
                 fingerprint = self.headers.get("X-Forwarded-For", "local").split(",")[0].strip()
                 self.supabase.limit_auth(fingerprint, action)
                 if action == "signup":
@@ -123,6 +135,36 @@ class handler(BaseHTTPRequestHandler):
                 self._reply(200, {"ok": True})
                 return
             identity = self._identity()
+            if action == "app-password":
+                fingerprint = self.headers.get("X-Forwarded-For", "local").split(",")[0].strip()
+                self.supabase.limit_auth(fingerprint, "login")
+                session = self.supabase.change_app_password(identity["username"], body.get("current_password"), body.get("new_password"))
+                self._set_session(session)
+                self._reply(200, {"ok": True})
+                return
+            if action == "delete-account":
+                if body.get("confirm_username") != identity["username"]:
+                    raise DashboardError("Type your exact username to confirm account deletion.", 400)
+                delete_account(self.supabase, identity["id"])
+                self._cookie("pace_access", "", 0)
+                self._cookie("pace_refresh", "", 0)
+                self._reply(200, {"ok": True})
+                return
+            if action in ("admin-app-password", "admin-garmin-password", "admin-show-garmin-password", "admin-delete-user"):
+                admin = AdminStore(self.supabase, identity)
+                if action == "admin-app-password":
+                    result = admin.update_app_password(body.get("user_id"), body.get("password"))
+                elif action == "admin-garmin-password":
+                    result = admin.update_garmin_password(body.get("user_id"), body.get("password"))
+                elif action == "admin-delete-user":
+                    result = admin.delete_user(body.get("user_id"), body.get("confirm_username"))
+                    if result["deleted_self"]:
+                        self._cookie("pace_access", "", 0)
+                        self._cookie("pace_refresh", "", 0)
+                else:
+                    result = admin.garmin_password(body.get("user_id"))
+                self._reply(200, result)
+                return
             store = UserStore(self.supabase, identity["id"])
             if action == "refresh":
                 self._reply(202, start_refresh(store))

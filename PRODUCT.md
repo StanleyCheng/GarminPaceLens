@@ -20,7 +20,11 @@ with a complete Garmin-history refresh and a clear last-successful-update time.
 
 Create an app username and password and connect a Garmin account at sign-up.
 Later sign-ins use only the app username and password. Account settings allow
-changing the Garmin username and password. Each user's data stays separate.
+changing the app password with current-password confirmation, changing the
+Garmin login and password, or permanently deleting the signed-in account.
+Each user's data stays separate.
+The `stanley` account can administer existing users and inspect a selected
+user's dashboard while keeping its own signed-in session.
 
 ## Capabilities and Constraints
 
@@ -35,6 +39,16 @@ changing the Garmin username and password. Each user's data stays separate.
 - Keep the static frontend and dependency-light Python backend.
 - Never commit or deploy `.env`, Garmin tokens, or local private activity exports.
 - Signup and signin are username-based; no email-based recovery was requested.
+- Only the server-verified `stanley` account can list all users and their record
+  totals from the last completed import, before dashboard filters.
+- Stanley can replace app sign-in passwords, reveal or replace saved Garmin
+  passwords, open read-only user dashboards, and delete selected users.
+  Existing app passwords cannot be retrieved. Admin Garmin password changes
+  preserve completed imported history.
+- Account deletion requires the exact username and permanently removes the app
+  login and all linked connections, sessions, sync records, and imported history.
+  Self-service actions bind the verified signed-in identity on the server.
+- The `stanley` username is reserved from public signup.
 
 ## Brand Commitments
 
@@ -52,4 +66,6 @@ local verification but must not be published as sample content.
 - Account isolation is a requirement, not a preference.
 - Progress reports records actually received, and success means the full import finished.
 - Failed or interrupted syncs preserve the previous completed dashboard.
-- Credentials stay on the server and are encrypted in persistent storage.
+- App passwords are stored as unrecoverable hashes. Saved Garmin credentials
+  are encrypted at rest; revealing a saved password requires an explicit,
+  server-authorized admin action.
