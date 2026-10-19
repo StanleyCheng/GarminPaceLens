@@ -1,5 +1,7 @@
 import { createInsightDashboard } from "./insight-ui.mjs";
 import { parseLocalExport } from "./local-export.mjs";
+import { createAdminPanel } from "./admin-ui.mjs";
+import { createDeletionDialog } from "./account-deletion.mjs";
 
 const statusEl = document.getElementById("status");
 const refreshButton = document.getElementById("refresh-button");
@@ -10,13 +12,61 @@ const emptyView = document.getElementById("empty-view");
 const accountBar = document.getElementById("account-bar");
 const accountButton = document.getElementById("account-button");
 const dashboardContent = document.getElementById("dashboard-content");
+const adminView = document.getElementById("admin-view");
+const adminButton = document.getElementById("admin-button");
+const stanleyReturnButton = document.getElementById("stanley-return-button");
 const dashboard = createInsightDashboard();
+const deletion = createDeletionDialog({ request: apiRequest,
+  sessionExpired: () => showAuth("Your session expired. Sign in again to manage your account.", true) });
+const admin = createAdminPanel({ request: apiRequest, viewDashboard: viewUserDashboard,
+  sessionExpired: () => showAuth("Your session expired. Sign in again to manage users.", true),
+  closeDeletion: () => deletion.close(),
+  confirmDeletion: (user, onDeleted) => deletion.open(user, {
+    action: "admin-delete-user", self: user.username === currentUser?.username,
+    onDeleted: (result) => {
+      if (result.deleted_self) {
+        showAuth("Your account and all linked records have been deleted.");
+        return;
+      }
+      if (viewedUser?.user_id === user.user_id) {
+        viewedUser = null;
+        currentPaceData = null;
+        dashboard.clear();
+        setUpdatedTime(null);
+        updateNavigation();
+      }
+      onDeleted();
+    },
+  }) });
 let currentPaceData = null;
 let localMode = false;
 let currentUser = null;
 let signupMode = false;
 let syncRunning = false;
+let accountRunning = false;
 let refreshGeneration = 0;
+let viewGeneration = 0;
+let viewedUser = null;
+let ownPayload = null;
+
+function updateNavigation() {
+  const isAdmin = !localMode && currentUser?.username === "stanley";
+  adminButton.hidden = !isAdmin;
+  adminButton.disabled = syncRunning || accountRunning;
+  stanleyReturnButton.hidden = !isAdmin || (adminView.hidden && !viewedUser);
+  stanleyReturnButton.disabled = syncRunning || accountRunning;
+  document.getElementById("signout-button").disabled = accountRunning;
+  accountView.querySelectorAll("input, textarea, button").forEach((field) => {
+    field.disabled = accountRunning || syncRunning;
+  });
+  accountButton.disabled = syncRunning || accountRunning || localMode;
+  refreshButton.disabled = syncRunning || accountRunning || !currentUser;
+  accountButton.hidden = localMode || Boolean(viewedUser) || !adminView.hidden;
+  refreshButton.hidden = localMode || Boolean(viewedUser) || !adminView.hidden;
+  document.querySelector(".refresh-control").hidden = !adminView.hidden;
+  document.getElementById("viewing-banner").hidden = !viewedUser || !adminView.hidden;
+  document.getElementById("empty-refresh").hidden = localMode || Boolean(viewedUser);
+}
 
 function showStatus(message, kind = "") {
   statusEl.className = `status${kind ? ` status-${kind}` : ""}`;
@@ -41,11 +91,24 @@ function setUpdatedTime(value) {
 }
 
 function showDashboard() {
+  admin.hide();
+  adminView.hidden = true;
+  adminButton.removeAttribute("aria-current");
   authView.hidden = true;
   accountView.hidden = true;
   accountButton.removeAttribute("aria-current");
   dashboardContent.hidden = !currentPaceData;
   emptyView.hidden = Boolean(currentPaceData);
+  document.querySelector(".dashboard-heading h2").textContent = viewedUser
+    ? `${viewedUser.username}’s training, in context` : "Your training, in context";
+  if (!localMode) {
+    document.getElementById("empty-title").textContent = viewedUser
+      ? `${viewedUser.username} has no imported history` : "Start with your Garmin history";
+    document.getElementById("empty-intro").textContent = viewedUser
+      ? "This user has not completed an import. Their records will appear after they sync Garmin."
+      : "Import your Garmin activities to explore ten training and performance views.";
+  }
+  updateNavigation();
   if (currentPaceData) dashboard.render();
 }
 
@@ -53,8 +116,7 @@ function setSyncState(running, count = 0) {
   syncRunning = running;
   document.getElementById("sync-dot").hidden = !running;
   document.getElementById("sync-label").textContent = running
-    ? `Loading · ${count.toLocaleString()} records` : localMode ? "Local export" : "Last data update";
-  refreshButton.hidden = localMode;
+    ? `Loading · ${count.toLocaleString()} records` : localMode ? "Local export" : viewedUser ? "Last user import" : "Last data update";
   refreshButton.disabled = running || !currentUser;
   refreshButton.setAttribute("aria-label", running
     ? "Loading all Garmin activities" : "Refresh all Garmin activities");
@@ -64,10 +126,18 @@ function setSyncState(running, count = 0) {
   document.getElementById("empty-refresh").disabled = running;
   document.getElementById("empty-refresh").textContent = running ? "Importing all activities…" : "Import all Garmin activities";
   accountButton.disabled = running || localMode;
+  updateNavigation();
 }
 
 function clearUser() {
   refreshGeneration += 1;
+  viewGeneration += 1;
+  admin.clear();
+  adminView.hidden = true;
+  viewedUser = null;
+  ownPayload = null;
+  accountRunning = false;
+  clearOwnPasswordForm();
   currentUser = null;
   currentPaceData = null;
   localMode = false;
@@ -84,6 +154,8 @@ function clearUser() {
   accountView.hidden = true;
   emptyView.hidden = true;
   document.getElementById("garmin-password").value = "";
+  document.getElementById("garmin-username").value = "";
+  document.getElementById("account-name").textContent = "";
   document.getElementById("garmin-session").value = "";
   document.getElementById("signup-garmin-password").value = "";
   document.getElementById("app-password").value = "";
@@ -203,6 +275,8 @@ async function loadDashboard() {
     const result = await apiRequest();
     if (!result.user?.username) throw new Error("Your account could not be loaded. Sign in again.");
     currentUser = result.user;
+    viewedUser = null;
+    ownPayload = result.payload || null;
     accountBar.hidden = false;
     document.getElementById("account-name").textContent = `Signed in as ${currentUser.username}`;
     document.getElementById("signout-button").hidden = false;
@@ -242,7 +316,7 @@ async function loadDashboard() {
 }
 
 async function refresh() {
-  if (syncRunning || !currentUser) return;
+  if (syncRunning || !currentUser || viewedUser || !adminView.hidden) return;
   if (localMode) {
     showStatus("Run get-garmin.py for newer data, then choose the refreshed JSON export.");
     return;
@@ -263,6 +337,7 @@ async function refresh() {
       if (generation !== refreshGeneration) return;
     }
     if (!result.payload) throw new Error("The completed import did not include your dashboard. Refresh again to retry.");
+    ownPayload = result.payload;
     applyPayload(result.payload);
     const count = Number.isInteger(result.records_loaded) ? result.records_loaded : result.payload.meta?.activity_count_fetched;
     showStatus(`${Number.isInteger(count) ? count.toLocaleString() : "All"} Garmin records imported. Your dashboard is up to date.`, "success");
@@ -283,6 +358,61 @@ function setFormBusy(form, busy) {
   const button = form.querySelector('button[type="submit"]');
   if (busy) button.setAttribute("aria-busy", "true");
   else button.removeAttribute("aria-busy");
+}
+
+function setAccountBusy(busy) {
+  accountRunning = busy;
+  accountView.querySelectorAll("input, textarea, button").forEach((field) => { field.disabled = busy; });
+  updateNavigation();
+}
+
+function resetOwnPasswordInputs() {
+  document.getElementById("own-current-password").value = "";
+  const field = document.getElementById("own-new-password");
+  field.value = "";
+  field.type = "password";
+  const toggle = document.getElementById("own-password-toggle");
+  toggle.textContent = "Show";
+  toggle.setAttribute("aria-pressed", "false");
+  toggle.setAttribute("aria-label", "Show new app password");
+}
+
+function clearOwnPasswordForm() {
+  resetOwnPasswordInputs();
+  const status = document.getElementById("own-password-status");
+  status.textContent = "";
+  status.hidden = true;
+}
+
+async function submitOwnPassword(event) {
+  event.preventDefault();
+  if (!currentUser || localMode || viewedUser || accountRunning || syncRunning) return;
+  const form = event.currentTarget;
+  const status = document.getElementById("own-password-status");
+  const body = { current_password: document.getElementById("own-current-password").value,
+    new_password: document.getElementById("own-new-password").value };
+  setAccountBusy(true);
+  setFormBusy(form, true);
+  status.className = "status";
+  status.setAttribute("role", "status");
+  status.textContent = "Changing your app password…";
+  status.hidden = false;
+  try {
+    await apiRequest("app-password", body);
+    status.className = "status status-success";
+    status.textContent = "Your app password has been changed. Use the new password the next time you sign in.";
+  } catch (error) {
+    if (error.status === 401) showAuth("Your session expired. Sign in again to change your password.", true);
+    else {
+      status.className = "status status-error";
+      status.setAttribute("role", "alert");
+      status.textContent = error.message;
+    }
+  } finally {
+    resetOwnPasswordInputs();
+    setFormBusy(form, false);
+    setAccountBusy(false);
+  }
 }
 
 async function submitAuth(event) {
@@ -316,7 +446,8 @@ async function submitAuth(event) {
 }
 
 function openAccount() {
-  if (!currentUser || syncRunning || localMode) return;
+  if (!currentUser || syncRunning || accountRunning || localMode || viewedUser || !adminView.hidden) return;
+  clearOwnPasswordForm();
   document.getElementById("garmin-username").value = currentUser.garmin_username || "";
   document.getElementById("garmin-password").value = "";
   dashboardContent.hidden = true;
@@ -327,9 +458,64 @@ function openAccount() {
   document.getElementById("garmin-username").focus();
 }
 
+function openAdmin() {
+  if (currentUser?.username !== "stanley" || localMode || syncRunning || accountRunning) return;
+  viewGeneration += 1;
+  dashboardContent.hidden = true;
+  emptyView.hidden = true;
+  accountView.hidden = true;
+  authView.hidden = true;
+  adminView.hidden = false;
+  accountButton.removeAttribute("aria-current");
+  adminButton.setAttribute("aria-current", "page");
+  updateNavigation();
+  showStatus("");
+  document.getElementById("admin-title").focus();
+  void admin.open();
+}
+
+async function viewUserDashboard(user) {
+  const generation = ++viewGeneration;
+  const result = await apiRequest(`admin-dashboard&user_id=${encodeURIComponent(user.user_id)}`);
+  if (generation !== viewGeneration || !currentUser) return;
+  if (!result.read_only || result.user?.user_id !== user.user_id) {
+    throw new Error("The selected dashboard could not be verified. Reload users and try again.");
+  }
+  viewedUser = result.user;
+  dashboard.clear();
+  currentPaceData = null;
+  document.getElementById("viewing-name").textContent = `Viewing ${viewedUser.username}’s dashboard`;
+  if (result.payload) applyPayload(result.payload);
+  else {
+    setUpdatedTime(null);
+    showDashboard();
+  }
+  setSyncState(false);
+  showStatus("");
+  document.getElementById("viewing-back-button").focus();
+}
+
+function returnToStanley() {
+  if (currentUser?.username !== "stanley") return;
+  viewGeneration += 1;
+  viewedUser = null;
+  currentPaceData = null;
+  dashboard.clear();
+  if (ownPayload) applyPayload(ownPayload);
+  else {
+    setUpdatedTime(null);
+    showDashboard();
+  }
+  setSyncState(false);
+  showStatus("");
+  adminButton.focus();
+}
+
 async function submitGarmin(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  if (accountRunning || syncRunning) return;
+  setAccountBusy(true);
   setFormBusy(form, true);
   showStatus("Saving your Garmin connection…");
   try {
@@ -348,6 +534,7 @@ async function submitGarmin(event) {
     else showStatus(error.message, "error");
   } finally {
     setFormBusy(form, false);
+    setAccountBusy(false);
   }
 }
 
@@ -367,6 +554,7 @@ async function signOut() {
 async function submitSession(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  if (accountRunning || syncRunning) return;
   const field = document.getElementById("garmin-session");
   try {
     JSON.parse(field.value);
@@ -375,6 +563,7 @@ async function submitSession(event) {
     field.focus();
     return;
   }
+  setAccountBusy(true);
   setFormBusy(form, true);
   showStatus("Saving your verified Garmin session…");
   try {
@@ -387,11 +576,31 @@ async function submitSession(event) {
     else showStatus(error.message, "error");
   } finally {
     setFormBusy(form, false);
+    setAccountBusy(false);
   }
 }
 
 async function init() {
   dashboard.init();
+  deletion.init();
+  admin.init();
+  document.getElementById("own-app-password-form").addEventListener("submit", submitOwnPassword);
+  document.getElementById("own-password-toggle").addEventListener("click", (event) => {
+    const field = document.getElementById("own-new-password");
+    const visible = field.type === "password";
+    field.type = visible ? "text" : "password";
+    event.currentTarget.textContent = visible ? "Hide" : "Show";
+    event.currentTarget.setAttribute("aria-pressed", String(visible));
+    event.currentTarget.setAttribute("aria-label", `${visible ? "Hide" : "Show"} new app password`);
+  });
+  document.getElementById("delete-own-account").addEventListener("click", () => {
+    if (!currentUser || accountRunning || syncRunning || localMode || viewedUser) return;
+    deletion.open(currentUser, { action: "delete-account", self: true,
+      onDeleted: () => showAuth("Your account and all linked records have been deleted.") });
+  });
+  adminButton.addEventListener("click", openAdmin);
+  document.getElementById("viewing-back-button").addEventListener("click", openAdmin);
+  stanleyReturnButton.addEventListener("click", returnToStanley);
   document.querySelectorAll(".local-data-input").forEach((input) => input.addEventListener("change", loadLocalFile));
   refreshButton.addEventListener("click", refresh);
   document.getElementById("empty-refresh").addEventListener("click", refresh);
