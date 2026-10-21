@@ -193,6 +193,11 @@ The palette combines navy and chart blue with a darker action green, supported b
 
 The page is a vertical application shell with a sticky, full-width header and a centered main container capped at (1100px). Desktop main gutters are (32px); they reduce to (20px) at (720px) and (16px) at (380px). The header includes safe-area-aware gutters. Its brand sits at the left and refresh/update controls stay at the right.
 
+The language button sits at the far right of the header and remains available on
+every screen. At widths up to (720px), the brand and language button occupy the
+first row; update metadata and refresh occupy a second row aligned right. Admin
+screens hide the update group while retaining the brand and language button.
+
 Forms remain one column. The sign-in form is capped at (430px), account settings at (560px), and explanatory cleaning text at (70ch). Reused gaps and padding follow the frontmatter spacing scale, with larger section breaks rather than nested cards.
 
 The dashboard has a five-field filter row on desktop, arranged as three then two fields on narrow screens. A bordered summary row follows. A horizontal, scrollable icon rail selects one of ten views; arrow controls and keyboard navigation supplement touch swiping. The selected chart comes before the monthly table and cleaning disclosure. Chart height is (360px), or (310px) on narrow screens; two-panel charts grow to (520px), or (500px) on narrow screens. The calendar chart scrolls inside its own viewport on phones. Table scrolling is contained within its rounded wrapper.
@@ -228,6 +233,19 @@ Inputs and the session textarea use white surfaces, the shared field stroke, and
 ### Navigation
 
 The brand icon and name anchor the header. Update metadata is right-aligned beside the refresh action on both desktop and mobile. Account identity and text actions sit in a separate horizontal row with a bottom divider; long account names may wrap without widening the page. Back navigation uses a stroked arrow and text.
+
+### Language
+
+The header language button uses the refresh control's outlined navy treatment,
+with a minimum (44px) height and a (72px) minimum width. It shows the destination
+language, `繁中` in English mode and `English` in Chinese mode. Keep the blue/green
+identity and Garmin Pace Lens name in both modes. Chinese uses the platform UI
+font with PingFang HK and Microsoft JhengHei fallbacks. Text wraps naturally.
+
+Localize headings, descriptions, accessible labels, validation, status messages,
+chart legends and hover text, calendar names, month tables, and displayed dates.
+Retain metric symbols and numeric pace notation. Switching changes copy in
+place, preserves input values and current work, and requires no account request.
 
 ### Cards / Containers
 

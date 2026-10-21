@@ -1,3 +1,4 @@
+import { message as msg, setText, setLabel, t, number, date, errorMessage, onLanguageChange } from "./i18n.mjs";
 export function createAdminPanel({ request, viewDashboard, sessionExpired, confirmDeletion, closeDeletion }) {
   const view = document.getElementById("admin-view");
   const status = document.getElementById("admin-status");
@@ -6,11 +7,12 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
   const detail = document.getElementById("admin-user-detail");
   const reveal = document.getElementById("admin-reveal-garmin");
   let users = [];
+  let loaded = false;
   let selected = null;
   let generation = 0;
 
   function notice(message = "", kind = "", target = status) {
-    target.textContent = message;
+    setText(target, message);
     target.className = `status${kind ? ` status-${kind}` : ""}`;
     target.setAttribute("role", kind === "error" ? "alert" : "status");
     target.hidden = !message;
@@ -21,15 +23,15 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
     field.value = "";
     field.type = "password";
     const button = view.querySelector(`[data-password-toggle="${id}"]`);
-    button.textContent = "Show";
+    setText(button, "Show");
     button.setAttribute("aria-pressed", "false");
-    button.setAttribute("aria-label", `Show new ${id.includes("app") ? "app" : "Garmin"} password`);
+    setLabel(button, "aria-label", id.includes("app") ? "Show new app password" : "Show new Garmin password");
   }
 
   function hideSavedPassword() {
     document.getElementById("admin-current-garmin-password").value = "";
     document.getElementById("admin-saved-garmin").hidden = true;
-    reveal.textContent = "Show saved Garmin password";
+    setText(reveal, "Show saved Garmin password");
     reveal.setAttribute("aria-expanded", "false");
   }
 
@@ -39,7 +41,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
     hideSavedPassword();
     notice("", "", document.getElementById("admin-app-status"));
     notice("", "", document.getElementById("admin-garmin-status"));
-    document.getElementById("admin-garmin-account").textContent = "The Garmin account used for this user’s imports.";
+    setText(document.getElementById("admin-garmin-account"), "The Garmin account used for this user’s imports.");
   }
 
   function busy(value) {
@@ -50,41 +52,42 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
 
   function fail(error, target = status) {
     if (error.status === 401) sessionExpired();
-    else notice(error.message, "error", target);
+    else notice(errorMessage(error), "error", target);
   }
 
   function recordLabel(user) {
-    return user.imported_records == null ? "Record count unavailable" : `${user.imported_records.toLocaleString()} imported records`;
+    return user.imported_records == null ? msg("Record count unavailable") : msg("{count} imported records", { count: number(user.imported_records) });
   }
 
   function renderUsers() {
     const filtered = users.filter((user) => user.username.toLowerCase().includes(search.value.trim().toLowerCase()));
     list.replaceChildren();
-    document.getElementById("admin-user-count").textContent = search.value.trim()
-      ? `${filtered.length} of ${users.length} users` : `${users.length} ${users.length === 1 ? "user" : "users"}`;
+    setText(document.getElementById("admin-user-count"), search.value.trim()
+      ? msg("{count} of {total} users", { count: number(filtered.length), total: number(users.length) }) : msg(users.length === 1 ? "{count} user" : "{count} users", { count: number(users.length) }));
     const empty = document.getElementById("admin-list-empty");
     empty.hidden = filtered.length > 0;
-    empty.textContent = users.length ? "No matching users. Try another username." : "No users found. Reload the list to try again.";
+    setText(empty, users.length ? "No matching users. Try another username." : "No users found. Reload the list to try again.");
     for (const user of filtered) {
       const row = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
       button.className = "user-select";
+      button.disabled = view.hasAttribute("aria-busy");
       button.setAttribute("aria-pressed", String(selected?.user_id === user.user_id));
-      button.setAttribute("aria-label", `Manage ${user.username}, ${recordLabel(user)}`);
+      button.setAttribute("aria-label", t("Manage {username}, {records}", { username: user.username, records: recordLabel(user) }));
       const identity = document.createElement("span");
       identity.className = "user-list-identity";
       const name = document.createElement("strong");
       name.textContent = user.username;
       const time = document.createElement("span");
-      const date = new Date(user.last_import_at);
-      time.textContent = user.last_import_at && Number.isFinite(date.getTime())
-        ? new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" }).format(date)
-        : "No completed import";
+      const imported = new Date(user.last_import_at);
+      time.textContent = user.last_import_at && Number.isFinite(imported.getTime())
+        ? date(imported, { year: "numeric", month: "short", day: "numeric" })
+        : t("No completed import");
       identity.append(name, time);
       const count = document.createElement("span");
       count.className = "user-record-count";
-      count.textContent = user.imported_records == null ? "Unavailable" : user.imported_records.toLocaleString();
+      count.textContent = user.imported_records == null ? t("Unavailable") : number(user.imported_records);
       button.append(identity, count);
       button.addEventListener("click", () => selectUser(user));
       row.append(button);
@@ -96,8 +99,8 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
     selected = user;
     clearPasswords();
     notice();
-    document.getElementById("admin-selected-name").textContent = user.username;
-    document.getElementById("admin-selected-records").textContent = recordLabel(user);
+    setText(document.getElementById("admin-selected-name"), msg("{value}", { value: user.username }));
+    setText(document.getElementById("admin-selected-records"), recordLabel(user));
     document.getElementById("admin-select-prompt").hidden = true;
     detail.hidden = false;
     renderUsers();
@@ -105,6 +108,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
   }
 
   async function open() {
+    loaded = false;
     const ticket = ++generation;
     selected = null;
     users = [];
@@ -114,7 +118,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
     detail.hidden = true;
     document.getElementById("admin-select-prompt").hidden = false;
     document.getElementById("admin-list-empty").hidden = true;
-    document.getElementById("admin-user-count").textContent = "Loading…";
+    setText(document.getElementById("admin-user-count"), "Loading…");
     notice("Loading users and completed import totals…");
     busy(true);
     try {
@@ -122,6 +126,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
       if (ticket !== generation) return;
       if (!Array.isArray(result.users)) throw new Error("The user list could not be loaded. Reload users to try again.");
       users = result.users;
+      loaded = true;
       renderUsers();
       notice();
     } catch (error) {
@@ -145,9 +150,9 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
       const result = await request("admin-show-garmin-password", { user_id: selected.user_id });
       if (ticket !== generation) return;
       document.getElementById("admin-current-garmin-password").value = result.garmin_password;
-      document.getElementById("admin-garmin-account").textContent = result.garmin_username;
+      setText(document.getElementById("admin-garmin-account"), msg("{value}", { value: result.garmin_username }));
       saved.hidden = false;
-      reveal.textContent = "Hide saved Garmin password";
+      setText(reveal, "Hide saved Garmin password");
       reveal.setAttribute("aria-expanded", "true");
     } catch (error) {
       if (ticket === generation) fail(error);
@@ -164,12 +169,12 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
     const field = document.getElementById(`admin-${kind}-password`);
     const feedback = document.getElementById(`admin-${kind}-status`);
     busy(true);
-    notice(`Saving ${kind === "app" ? "app sign-in" : "Garmin connection"} password for ${user.username}…`, "", feedback);
+    notice(msg(kind === "app" ? "Saving app sign-in password for {username}…" : "Saving Garmin connection password for {username}…", { username: user.username }), "", feedback);
     try {
       await request(`admin-${kind}-password`, { user_id: user.user_id, password: field.value });
       if (ticket !== generation) return;
       if (kind === "garmin") hideSavedPassword();
-      notice(`${kind === "app" ? "App sign-in" : "Garmin connection"} password saved for ${user.username}.${kind === "garmin" ? " Imported history is unchanged." : ""}`, "success", feedback);
+      notice(msg(kind === "app" ? "App sign-in password saved for {username}." : "Garmin connection password saved for {username}. Imported history is unchanged.", { username: user.username }), "success", feedback);
     } catch (error) {
       if (ticket === generation) fail(error, feedback);
     } finally {
@@ -181,6 +186,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
   }
 
   function init() {
+    onLanguageChange(() => { if (loaded) renderUsers(); });
     document.getElementById("admin-delete-user").addEventListener("click", () => {
       if (!selected) return;
       const user = { ...selected };
@@ -192,7 +198,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
         detail.hidden = true;
         document.getElementById("admin-select-prompt").hidden = false;
         renderUsers();
-        notice(`${user.username}’s app login and all linked records were deleted.`, "success");
+        notice(msg("{username}’s app login and all linked records were deleted.", { username: user.username }), "success");
         search.focus();
       });
     });
@@ -205,7 +211,7 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
       if (!selected) return;
       const ticket = generation;
       busy(true);
-      notice(`Opening ${selected.username}’s dashboard…`);
+      notice(msg("Opening {username}’s dashboard…", { username: selected.username }));
       try { await viewDashboard(selected); }
       catch (error) { if (ticket === generation) fail(error); }
       finally { if (ticket === generation) busy(false); }
@@ -215,9 +221,9 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
         const field = document.getElementById(button.dataset.passwordToggle);
         const visible = field.type === "password";
         field.type = visible ? "text" : "password";
-        button.textContent = visible ? "Hide" : "Show";
+        setText(button, visible ? "Hide" : "Show");
         button.setAttribute("aria-pressed", String(visible));
-        button.setAttribute("aria-label", `${visible ? "Hide" : "Show"} new ${field.id.includes("app") ? "app" : "Garmin"} password`);
+        setLabel(button, "aria-label", field.id.includes("app") ? (visible ? "Hide new app password" : "Show new app password") : (visible ? "Hide new Garmin password" : "Show new Garmin password"));
       });
     });
   }
@@ -230,13 +236,14 @@ export function createAdminPanel({ request, viewDashboard, sessionExpired, confi
   }
 
   function clear() {
+    loaded = false;
     hide();
     selected = null;
     users = [];
     list.replaceChildren();
     search.value = "";
     detail.hidden = true;
-    document.getElementById("admin-selected-name").textContent = "";
+    setText(document.getElementById("admin-selected-name"), "");
     notice();
   }
 

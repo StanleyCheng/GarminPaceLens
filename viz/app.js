@@ -1,3 +1,4 @@
+import { initLanguage, message as msg, setText, setLabel, number, date, errorMessage, onLanguageChange } from "./i18n.mjs";
 import { createInsightDashboard } from "./insight-ui.mjs";
 import { parseLocalExport } from "./local-export.mjs";
 import { createAdminPanel } from "./admin-ui.mjs";
@@ -38,6 +39,7 @@ const admin = createAdminPanel({ request: apiRequest, viewDashboard: viewUserDas
       onDeleted();
     },
   }) });
+let lastUpdatedValue = null;
 let currentPaceData = null;
 let localMode = false;
 let currentUser = null;
@@ -71,22 +73,23 @@ function updateNavigation() {
 function showStatus(message, kind = "") {
   statusEl.className = `status${kind ? ` status-${kind}` : ""}`;
   statusEl.setAttribute("role", kind === "error" ? "alert" : "status");
-  statusEl.textContent = message;
+  setText(statusEl, message);
   statusEl.hidden = !message;
 }
 
 function setUpdatedTime(value) {
+  lastUpdatedValue = value;
   const updated = new Date(value);
   if (value && Number.isFinite(updated.getTime())) {
     lastUpdatedEl.dateTime = updated.toISOString();
-    lastUpdatedEl.textContent = new Intl.DateTimeFormat(undefined, {
+    setText(lastUpdatedEl, date(updated, {
       year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    }).format(updated);
-    lastUpdatedEl.title = `${localMode ? "Export generated" : "Last successful Garmin sync"}: ${updated.toLocaleString()}`;
+    }));
+    setLabel(lastUpdatedEl, "title", msg("{label}: {time}", { label: msg(localMode ? "Export generated" : "Last successful Garmin sync"), time: date(updated, { dateStyle: "long", timeStyle: "short" }) }));
   } else {
     lastUpdatedEl.removeAttribute("datetime");
-    lastUpdatedEl.textContent = localMode ? "No export loaded" : "Not synced yet";
-    lastUpdatedEl.title = localMode ? "Choose a Garmin JSON export below" : "A date appears after a complete import";
+    setText(lastUpdatedEl, localMode ? "No export loaded" : "Not synced yet");
+    setLabel(lastUpdatedEl, "title", localMode ? "Choose a Garmin JSON export below" : "A date appears after a complete import");
   }
 }
 
@@ -99,14 +102,14 @@ function showDashboard() {
   accountButton.removeAttribute("aria-current");
   dashboardContent.hidden = !currentPaceData;
   emptyView.hidden = Boolean(currentPaceData);
-  document.querySelector(".dashboard-heading h2").textContent = viewedUser
-    ? `${viewedUser.username}’s training, in context` : "Your training, in context";
+  setText(document.querySelector(".dashboard-heading h2"), viewedUser
+    ? msg("{username}’s training, in context", { username: viewedUser.username }) : "Your training, in context");
   if (!localMode) {
-    document.getElementById("empty-title").textContent = viewedUser
-      ? `${viewedUser.username} has no imported history` : "Start with your Garmin history";
-    document.getElementById("empty-intro").textContent = viewedUser
+    setText(document.getElementById("empty-title"), viewedUser
+      ? msg("{username} has no imported history", { username: viewedUser.username }) : "Start with your Garmin history");
+    setText(document.getElementById("empty-intro"), viewedUser
       ? "This user has not completed an import. Their records will appear after they sync Garmin."
-      : "Import your Garmin activities to explore ten training and performance views.";
+      : "Import your Garmin activities to explore ten training and performance views.");
   }
   updateNavigation();
   if (currentPaceData) dashboard.render();
@@ -115,16 +118,16 @@ function showDashboard() {
 function setSyncState(running, count = 0) {
   syncRunning = running;
   document.getElementById("sync-dot").hidden = !running;
-  document.getElementById("sync-label").textContent = running
-    ? `Loading · ${count.toLocaleString()} records` : localMode ? "Local export" : viewedUser ? "Last user import" : "Last data update";
+  setText(document.getElementById("sync-label"), running
+    ? msg("Loading · {count} records", { count: number(count) }) : localMode ? "Local export" : viewedUser ? "Last user import" : "Last data update");
   refreshButton.disabled = running || !currentUser;
-  refreshButton.setAttribute("aria-label", running
+  setLabel(refreshButton, "aria-label", running
     ? "Loading all Garmin activities" : "Refresh all Garmin activities");
-  refreshButton.title = currentUser ? "Refresh your complete Garmin history" : "Sign in to refresh your Garmin history";
+  setLabel(refreshButton, "title", currentUser ? "Refresh your complete Garmin history" : "Sign in to refresh your Garmin history");
   if (running) refreshButton.setAttribute("aria-busy", "true");
   else refreshButton.removeAttribute("aria-busy");
   document.getElementById("empty-refresh").disabled = running;
-  document.getElementById("empty-refresh").textContent = running ? "Importing all activities…" : "Import all Garmin activities";
+  setText(document.getElementById("empty-refresh"), running ? "Importing all activities…" : "Import all Garmin activities");
   accountButton.disabled = running || localMode;
   updateNavigation();
 }
@@ -148,14 +151,14 @@ function clearUser() {
   document.getElementById("local-file-picker").hidden = true;
   document.getElementById("local-online-link").hidden = true;
   document.getElementById("empty-refresh").hidden = false;
-  document.getElementById("empty-title").textContent = "Start with your Garmin history";
-  document.getElementById("empty-intro").textContent = "Import your Garmin activities to explore ten training and performance views.";
+  setText(document.getElementById("empty-title"), "Start with your Garmin history");
+  setText(document.getElementById("empty-intro"), "Import your Garmin activities to explore ten training and performance views.");
   dashboardContent.hidden = true;
   accountView.hidden = true;
   emptyView.hidden = true;
   document.getElementById("garmin-password").value = "";
   document.getElementById("garmin-username").value = "";
-  document.getElementById("account-name").textContent = "";
+  setText(document.getElementById("account-name"), "");
   document.getElementById("garmin-session").value = "";
   document.getElementById("signup-garmin-password").value = "";
   document.getElementById("app-password").value = "";
@@ -165,10 +168,10 @@ function clearUser() {
 
 function setAuthMode(signup) {
   signupMode = signup;
-  document.getElementById("auth-title").textContent = signup ? "Create your account" : "Welcome back";
-  document.getElementById("auth-intro").textContent = signup
+  setText(document.getElementById("auth-title"), signup ? "Create your account" : "Welcome back");
+  setText(document.getElementById("auth-intro"), signup
     ? "Choose your app sign-in and connect Garmin to import your complete activity history."
-    : "Sign in to explore your personal Garmin activity history.";
+    : "Sign in to explore your personal Garmin activity history.");
   document.getElementById("signup-garmin").hidden = !signup;
   document.getElementById("signup-garmin").disabled = !signup;
   document.getElementById("username-hint").hidden = !signup;
@@ -178,9 +181,9 @@ function setAuthMode(signup) {
   password.autocomplete = signup ? "new-password" : "current-password";
   password.minLength = signup ? 10 : 1;
   document.getElementById("signup-garmin-password").value = "";
-  document.getElementById("auth-submit").textContent = signup ? "Create account and import" : "Sign in";
-  document.getElementById("auth-switch-copy").textContent = signup ? "Already have an account?" : "New to Garmin Pace Lens?";
-  document.getElementById("auth-switch").textContent = signup ? "Sign in" : "Create an account";
+  setText(document.getElementById("auth-submit"), signup ? "Create account and import" : "Sign in");
+  setText(document.getElementById("auth-switch-copy"), signup ? "Already have an account?" : "New to Garmin Pace Lens?");
+  setText(document.getElementById("auth-switch"), signup ? "Sign in" : "Create an account");
 }
 
 function showAuth(message = "", isError = false) {
@@ -205,8 +208,8 @@ function showLocalFilePicker() {
   accountView.hidden = true;
   dashboardContent.hidden = true;
   emptyView.hidden = false;
-  document.getElementById("empty-title").textContent = "Open your Garmin export";
-  document.getElementById("empty-intro").textContent = "Choose the garmin_activities.json file created by get-garmin.py in viz/data. Your activity data stays in this browser.";
+  setText(document.getElementById("empty-title"), "Open your Garmin export");
+  setText(document.getElementById("empty-intro"), "Choose the garmin_activities.json file created by get-garmin.py in viz/data. Your activity data stays in this browser.");
   document.getElementById("empty-refresh").hidden = true;
   document.getElementById("local-file-picker").hidden = false;
   document.getElementById("local-online-link").hidden = false;
@@ -223,13 +226,13 @@ async function loadLocalFile(event) {
     const payload = parseLocalExport(await file.text());
     applyPayload(payload);
     accountBar.hidden = false;
-    document.getElementById("account-name").textContent = "Local data preview";
+    setText(document.getElementById("account-name"), "Local data preview");
     accountButton.hidden = true;
     document.getElementById("signout-button").hidden = true;
     document.getElementById("local-file-replace").hidden = false;
-    showStatus(`${file.name} opened locally. Your activity data stays in this browser.`, "success");
+    showStatus(msg("{filename} opened locally. Your activity data stays in this browser.", { filename: file.name }), "success");
   } catch (error) {
-    showStatus(`${error.message} Choose a Garmin Pace Lens JSON export and try again.`, "error");
+    showStatus(msg("{error} Choose a Garmin Pace Lens JSON export and try again.", { error: errorMessage(error) }), "error");
   } finally {
     input.value = "";
   }
@@ -278,7 +281,7 @@ async function loadDashboard() {
     viewedUser = null;
     ownPayload = result.payload || null;
     accountBar.hidden = false;
-    document.getElementById("account-name").textContent = `Signed in as ${currentUser.username}`;
+    setText(document.getElementById("account-name"), msg("Signed in as {username}", { username: currentUser.username }));
     document.getElementById("signout-button").hidden = false;
     if (result.payload) applyPayload(result.payload);
     else {
@@ -297,7 +300,7 @@ async function loadDashboard() {
         if (response.ok) {
           showLocalFilePicker();
           accountBar.hidden = false;
-          document.getElementById("account-name").textContent = "Local data preview";
+          setText(document.getElementById("account-name"), "Local data preview");
           accountButton.hidden = true;
           document.getElementById("signout-button").hidden = true;
           document.getElementById("local-file-replace").hidden = false;
@@ -310,7 +313,7 @@ async function loadDashboard() {
       showLocalFilePicker();
       return true;
     }
-    showAuth(error.status === 401 ? "" : error.message, error.status !== 401);
+    showAuth(error.status === 401 ? "" : errorMessage(error), error.status !== 401);
     return false;
   }
 }
@@ -332,7 +335,7 @@ async function refresh() {
     while (!result.complete) {
       const count = Number.isInteger(result.records_loaded) ? result.records_loaded : 0;
       setSyncState(true, count);
-      showStatus(`Importing your complete Garmin history… ${count.toLocaleString()} records loaded. Keep this tab open until loading finishes.`);
+      showStatus(msg("Importing your complete Garmin history… {count} records loaded. Keep this tab open until loading finishes.", { count: number(count) }));
       result = await apiRequest("sync-step", { job_id: jobId });
       if (generation !== refreshGeneration) return;
     }
@@ -340,13 +343,15 @@ async function refresh() {
     ownPayload = result.payload;
     applyPayload(result.payload);
     const count = Number.isInteger(result.records_loaded) ? result.records_loaded : result.payload.meta?.activity_count_fetched;
-    showStatus(`${Number.isInteger(count) ? count.toLocaleString() : "All"} Garmin records imported. Your dashboard is up to date.`, "success");
+    showStatus(Number.isInteger(count)
+      ? msg("{count} Garmin records imported. Your dashboard is up to date.", { count: number(count) })
+      : "All Garmin records imported. Your dashboard is up to date.", "success");
   } catch (error) {
     if (generation !== refreshGeneration) return;
     if (error.status === 401) {
       showAuth("Your session expired. Sign in again to import your Garmin history.", true);
     } else {
-      showStatus(`Import stopped. ${error.message}${currentPaceData ? " Your last completed dashboard is still available." : ""}`, "error");
+      showStatus(msg("Import stopped. {error}{previous}", { error: errorMessage(error), previous: msg(currentPaceData ? " Your last completed dashboard is still available." : "") }), "error");
     }
   } finally {
     if (generation === refreshGeneration) setSyncState(false);
@@ -372,15 +377,15 @@ function resetOwnPasswordInputs() {
   field.value = "";
   field.type = "password";
   const toggle = document.getElementById("own-password-toggle");
-  toggle.textContent = "Show";
+  setText(toggle, "Show");
   toggle.setAttribute("aria-pressed", "false");
-  toggle.setAttribute("aria-label", "Show new app password");
+  setLabel(toggle, "aria-label", "Show new app password");
 }
 
 function clearOwnPasswordForm() {
   resetOwnPasswordInputs();
   const status = document.getElementById("own-password-status");
-  status.textContent = "";
+  setText(status, "");
   status.hidden = true;
 }
 
@@ -395,18 +400,18 @@ async function submitOwnPassword(event) {
   setFormBusy(form, true);
   status.className = "status";
   status.setAttribute("role", "status");
-  status.textContent = "Changing your app password…";
+  setText(status, "Changing your app password…");
   status.hidden = false;
   try {
     await apiRequest("app-password", body);
     status.className = "status status-success";
-    status.textContent = "Your app password has been changed. Use the new password the next time you sign in.";
+    setText(status, "Your app password has been changed. Use the new password the next time you sign in.");
   } catch (error) {
     if (error.status === 401) showAuth("Your session expired. Sign in again to change your password.", true);
     else {
       status.className = "status status-error";
       status.setAttribute("role", "alert");
-      status.textContent = error.message;
+      setText(status, errorMessage(error));
     }
   } finally {
     resetOwnPasswordInputs();
@@ -437,7 +442,7 @@ async function submitAuth(event) {
     const loaded = await loadDashboard();
     if (signup && loaded) await refresh();
   } catch (error) {
-    showStatus(error.message, "error");
+    showStatus(errorMessage(error), "error");
     document.getElementById("app-password").value = "";
   } finally {
     setFormBusy(form, false);
@@ -484,7 +489,7 @@ async function viewUserDashboard(user) {
   viewedUser = result.user;
   dashboard.clear();
   currentPaceData = null;
-  document.getElementById("viewing-name").textContent = `Viewing ${viewedUser.username}’s dashboard`;
+  setText(document.getElementById("viewing-name"), msg("Viewing {username}’s dashboard", { username: viewedUser.username }));
   if (result.payload) applyPayload(result.payload);
   else {
     setUpdatedTime(null);
@@ -531,7 +536,7 @@ async function submitGarmin(event) {
     if (await loadDashboard()) await refresh();
   } catch (error) {
     if (error.status === 401) showAuth("Your session expired. Sign in again to change your Garmin connection.", true);
-    else showStatus(error.message, "error");
+    else showStatus(errorMessage(error), "error");
   } finally {
     setFormBusy(form, false);
     setAccountBusy(false);
@@ -545,7 +550,7 @@ async function signOut() {
     await apiRequest("logout", {});
     showAuth("You have signed out.");
   } catch (error) {
-    showStatus(`Could not sign out. ${error.message}`, "error");
+    showStatus(msg("Could not sign out. {error}", { error: errorMessage(error) }), "error");
   } finally {
     button.disabled = false;
   }
@@ -573,7 +578,7 @@ async function submitSession(event) {
     await refresh();
   } catch (error) {
     if (error.status === 401) showAuth("Your session expired. Sign in again to save your Garmin connection.", true);
-    else showStatus(error.message, "error");
+    else showStatus(errorMessage(error), "error");
   } finally {
     setFormBusy(form, false);
     setAccountBusy(false);
@@ -581,6 +586,8 @@ async function submitSession(event) {
 }
 
 async function init() {
+  initLanguage();
+  onLanguageChange(() => setUpdatedTime(lastUpdatedValue));
   dashboard.init();
   deletion.init();
   admin.init();
@@ -589,9 +596,9 @@ async function init() {
     const field = document.getElementById("own-new-password");
     const visible = field.type === "password";
     field.type = visible ? "text" : "password";
-    event.currentTarget.textContent = visible ? "Hide" : "Show";
+    setText(event.currentTarget, visible ? "Hide" : "Show");
     event.currentTarget.setAttribute("aria-pressed", String(visible));
-    event.currentTarget.setAttribute("aria-label", `${visible ? "Hide" : "Show"} new app password`);
+    setLabel(event.currentTarget, "aria-label", visible ? "Hide new app password" : "Show new app password");
   });
   document.getElementById("delete-own-account").addEventListener("click", () => {
     if (!currentUser || accountRunning || syncRunning || localMode || viewedUser) return;

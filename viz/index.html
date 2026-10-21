@@ -24,17 +24,20 @@
         <img class="brand-icon" src="icons/garmin-pace-lens.png?v=garmin-pace-lens-2" alt="" width="44" height="44" />
         <h1>Garmin Pace Lens</h1>
       </div>
-      <div class="refresh-control">
-        <div class="update-label">
-          <span class="sync-label"><span id="sync-dot" class="sync-dot" hidden aria-hidden="true"></span><span id="sync-label">Last data update</span></span>
-          <time id="last-updated">Not synced yet</time>
+      <div class="header-actions">
+        <div class="refresh-control">
+          <div class="update-label">
+            <span class="sync-label"><span id="sync-dot" class="sync-dot" hidden aria-hidden="true"></span><span id="sync-label">Last data update</span></span>
+            <time id="last-updated">Not synced yet</time>
+          </div>
+          <button id="refresh-button" class="refresh-button" type="button" disabled aria-label="Refresh all Garmin activities" title="Sign in to refresh your Garmin history">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 7v5h-5M4 17v-5h5" />
+              <path d="M6.1 6.1A8 8 0 0 1 19.5 10M4.5 14A8 8 0 0 0 17.9 17.9" />
+            </svg>
+          </button>
         </div>
-        <button id="refresh-button" class="refresh-button" type="button" disabled aria-label="Refresh all Garmin activities" title="Sign in to refresh your Garmin history">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20 7v5h-5M4 17v-5h5" />
-            <path d="M6.1 6.1A8 8 0 0 1 19.5 10M4.5 14A8 8 0 0 0 17.9 17.9" />
-          </svg>
-        </button>
+        <button id="language-toggle" class="language-toggle" type="button" lang="zh-HK" aria-label="Switch to Traditional Chinese" title="Switch to Traditional Chinese">繁中</button>
       </div>
     </header>
 

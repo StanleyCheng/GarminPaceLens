@@ -37,6 +37,11 @@ user's dashboard while keeping its own signed-in session.
 - Preserve year/month filtering and monthly aggregation, and provide activity
   type and distance filters for all ten dashboard views.
 - Keep the static frontend and dependency-light Python backend.
+- Provide English and Hong Kong Traditional Chinese throughout the app, including
+  account and admin screens, chart labels, help, validation, and sync feedback.
+  Default to English and remember the choice in this browser after sign-out.
+  Keep the Garmin Pace Lens brand and original user/activity data unchanged.
+  Switching language preserves forms, filters, selected users, and active imports.
 - Never commit or deploy `.env`, Garmin tokens, or local private activity exports.
 - Signup and signin are username-based; no email-based recovery was requested.
 - Only the server-verified `stanley` account can list all users and their record

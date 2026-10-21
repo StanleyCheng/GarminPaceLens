@@ -1,3 +1,4 @@
+import { message as msg, setText, errorMessage } from "./i18n.mjs";
 export function createDeletionDialog({ request, sessionExpired }) {
   const dialog = document.getElementById("account-delete-dialog");
   const form = document.getElementById("delete-account-form");
@@ -10,7 +11,7 @@ export function createDeletionDialog({ request, sessionExpired }) {
   let generation = 0;
 
   function notice(message = "", error = false) {
-    status.textContent = message;
+    setText(status, message);
     status.className = `status${error ? " status-error" : ""}`;
     status.setAttribute("role", error ? "alert" : "status");
     status.hidden = !message;
@@ -43,8 +44,8 @@ export function createDeletionDialog({ request, sessionExpired }) {
     if (running) return;
     close();
     target = { user: { ...user }, action, onDeleted };
-    document.getElementById("delete-dialog-title").textContent = `Delete ${user.username}?`;
-    document.getElementById("delete-confirm-label").textContent = `Type ${user.username} to confirm`;
+    setText(document.getElementById("delete-dialog-title"), msg("Delete {username}?", { username: user.username }));
+    setText(document.getElementById("delete-confirm-label"), msg("Type {username} to confirm", { username: user.username }));
     document.getElementById("delete-dialog-self").hidden = !self;
     dialog.setAttribute("aria-describedby", self
       ? "delete-dialog-description delete-dialog-self" : "delete-dialog-description");
@@ -58,7 +59,7 @@ export function createDeletionDialog({ request, sessionExpired }) {
     const operation = target;
     const ticket = generation;
     setBusy(true);
-    notice(`Deleting ${operation.user.username} and all linked records…`);
+    notice(msg("Deleting {username} and all linked records…", { username: operation.user.username }));
     try {
       const result = await request(operation.action, {
         user_id: operation.user.user_id, confirm_username: username.value,
@@ -70,7 +71,7 @@ export function createDeletionDialog({ request, sessionExpired }) {
     } catch (error) {
       if (ticket !== generation) return;
       if (error.status === 401) sessionExpired();
-      else notice(error.message, true);
+      else notice(errorMessage(error), true);
     } finally {
       if (ticket === generation) setBusy(false);
     }

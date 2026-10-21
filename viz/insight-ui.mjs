@@ -1,6 +1,6 @@
+import { message as msg, setText, setLabel, number, monthNames, getLanguage, onLanguageChange, plotLocale } from "./i18n.mjs";
 import { INSIGHTS, buildInsight, formatPace, prepareActivities } from "./insights.mjs";
 
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const byId = (id) => document.getElementById(id);
 
 export function createInsightDashboard() {
@@ -25,7 +25,7 @@ export function createInsightDashboard() {
     for (const id of ["start-month-select", "end-month-select"]) {
       const select = byId(id);
       select.replaceChildren();
-      MONTH_NAMES.forEach((month, index) => select.add(new Option(month.slice(0, 3), String(index + 1))));
+      monthNames("short").forEach((month, index) => select.add(new Option(month, String(index + 1))));
     }
     byId("start-month-select").value = String(state.startMonth);
     byId("end-month-select").value = String(state.endMonth);
@@ -52,40 +52,42 @@ export function createInsightDashboard() {
   function renderCleanedSummary() {
     const paces = activities.map((activity) => activity.pace_s_per_km)
       .filter((value) => typeof value === "number" && Number.isFinite(value) && value >= 180 && value <= 1200);
-    byId("original-activities").textContent = originalCount.toLocaleString();
-    byId("cleaned-activities").textContent = activities.length.toLocaleString();
-    byId("excluded-activities").textContent = Math.max(0, originalCount - activities.length).toLocaleString();
-    byId("min-cleaned-pace").textContent = paces.length ? `${formatPace(Math.min(...paces))} /km` : "—";
-    byId("max-cleaned-pace").textContent = paces.length ? `${formatPace(Math.max(...paces))} /km` : "—";
+    setText(byId("original-activities"), number(originalCount));
+    setText(byId("cleaned-activities"), number(activities.length));
+    setText(byId("excluded-activities"), number(Math.max(0, originalCount - activities.length)));
+    setText(byId("min-cleaned-pace"), paces.length ? `${formatPace(Math.min(...paces))} /km` : "—");
+    setText(byId("max-cleaned-pace"), paces.length ? `${formatPace(Math.max(...paces))} /km` : "—");
   }
 
   function render() {
     if (!activities || state.year === null) return;
     const insight = INSIGHTS.find((item) => item.id === state.insight);
     const result = buildInsight(activities, state, { narrow: window.innerWidth <= 720 });
-    byId("chart-title").textContent = insight.title;
-    byId("insight-description").textContent = insight.description;
-    byId("chart-unit").textContent = state.insight === "volume"
-      ? (state.weeklyUnit === "hours" ? "Hours per week" : "Kilometres per week") : "";
-    byId("chart-note").textContent = result.note;
-    byId("chart").setAttribute("aria-label", `${insight.title}. ${result.note} Monthly figures are in the table below.`);
-    byId("table-year").textContent = String(state.year);
+    setText(byId("chart-title"), insight.title);
+    setText(byId("insight-description"), insight.description);
+    setText(byId("chart-unit"), state.insight === "volume"
+      ? (state.weeklyUnit === "hours" ? "Hours per week" : "Kilometres per week") : "");
+    setText(byId("chart-note"), result.note);
+    setLabel(byId("chart"), "aria-label", msg("{title}. {note} Monthly figures are in the table below.", { title: msg(insight.title), note: result.note }));
+    setText(byId("table-year"), String(state.year));
     byId("weekly-unit-field").hidden = state.insight !== "volume";
     byId("best-distance-field").hidden = state.insight !== "best";
-    byId("average-pace").textContent = formatPace(result.summary.averagePace);
-    byId("total-distance").textContent = `${result.summary.totalDistance.toFixed(1)} km`;
-    byId("activities-included").textContent = result.summary.activityCount.toLocaleString();
-    byId("active-days").textContent = result.summary.activeDays.toLocaleString();
+    setText(byId("average-pace"), formatPace(result.summary.averagePace));
+    setText(byId("total-distance"), `${result.summary.totalDistance.toFixed(1)} km`);
+    setText(byId("activities-included"), number(result.summary.activityCount));
+    setText(byId("active-days"), number(result.summary.activeDays));
     renderTable(result.rows);
     tabs.forEach((tab) => tab.setAttribute("aria-pressed", String(tab.dataset.insight === state.insight)));
     chart.style.minWidth = result.minWidth ? `${result.minWidth}px` : "";
     chart.style.height = ["compare", "endurance", "climbing"].includes(state.insight)
       ? (window.innerWidth <= 720 ? "500px" : "520px") : "";
     if (typeof Plotly === "undefined") {
-      chart.textContent = "The chart could not load. The monthly table below remains available.";
+      setText(chart, "The chart could not load. The monthly table below remains available.");
       return;
     }
-    Plotly.react(chart, result.traces, result.layout, { responsive: true,
+    const { insight: revisionInsight, ...filters } = state;
+    result.layout.uirevision = JSON.stringify([revisionInsight, filters]);
+    Plotly.react(chart, result.traces, result.layout, { locale: getLanguage() === "en" ? "en-US" : "zh-HK", responsive: true,
       displayModeBar: false, displaylogo: false, scrollZoom: false });
   }
 
@@ -96,7 +98,7 @@ export function createInsightDashboard() {
       hideTooltip();
       return;
     }
-    tooltip.textContent = tab.dataset.tooltip;
+    setText(tooltip, tab.dataset.tooltip);
     const bounds = tab.getBoundingClientRect();
     tooltip.style.left = `${Math.max(12, Math.min(window.innerWidth - 280, bounds.left))}px`;
     tooltip.style.top = `${bounds.bottom + 8}px`;
@@ -109,6 +111,12 @@ export function createInsightDashboard() {
   }
 
   function init() {
+    if (typeof Plotly !== "undefined") Plotly.register(plotLocale());
+    onLanguageChange(() => {
+      hideTooltip();
+      if (state.year !== null) { populateSelects(); renderCleanedSummary(); }
+      if (!byId("dashboard-content").hidden) { render(); updateArrows(); }
+    });
     byId("year-select").addEventListener("change", (event) => {
       state.year = Number(event.target.value); render();
     });

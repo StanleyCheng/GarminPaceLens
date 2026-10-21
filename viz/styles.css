@@ -35,6 +35,12 @@ svg { flex-shrink: 0; }
 .brand-icon { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; transform: scale(1.2); }
 h1 { font-size: 1.375rem; font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
 .refresh-control { display: flex; align-items: center; gap: 14px; margin-left: auto; flex-shrink: 0; }
+.header-actions { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.language-toggle { min-width: 72px; min-height: 44px; padding: 8px 12px; border: 1px solid #7391ab; border-radius: 8px; background: transparent; color: white; font-size: .875rem; font-weight: 600; transition: background .16s ease-out, border-color .16s ease-out; }
+.language-toggle:hover { background: #32628c; border-color: #c8dae8; }
+.language-toggle:active { background: #153f62; }
+.language-toggle:focus-visible { outline-color: #b7e7cc; }
+html:lang(zh-HK) body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", "Microsoft JhengHei", sans-serif; }
 .update-label { display: grid; gap: 2px; text-align: right; font-size: .75rem; line-height: 1.45; }
 .update-label time { color: white; font-variant-numeric: tabular-nums; }
 .sync-label { display: flex; justify-content: flex-end; align-items: center; gap: 7px; color: #d6e6f2; }
@@ -196,7 +202,11 @@ select:hover { border-color: var(--navy); }
   .admin-user-list { max-height: 300px; }
   .viewing-banner { flex-direction: column; align-items: flex-start; gap: 8px; }
   .delete-dialog { padding: 24px 20px; }
-  .title-strip { padding: 14px max(20px, env(safe-area-inset-right)) 14px max(20px, env(safe-area-inset-left)); gap: 12px; min-height: 80px; }
+  .title-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 12px max(20px, env(safe-area-inset-right)) 12px max(20px, env(safe-area-inset-left)); gap: 8px 12px; min-height: 80px; }
+  .header-actions { display: contents; }
+  .brand { grid-column: 1; grid-row: 1; }
+  .language-toggle { grid-column: 2; grid-row: 1; }
+  .refresh-control { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }
   .brand { gap: 9px; }
   .brand-icon { border-radius: 8px; }
   h1 { font-size: 1.125rem; }
@@ -231,7 +241,7 @@ select:hover { border-color: var(--navy); }
   .title-strip { padding-inline: 12px; gap: 8px; }
   .brand { gap: 6px; }
   .brand-icon { border-radius: 6px; }
-  h1 { font-size: 1rem; max-width: 72px; }
+  h1 { font-size: 1rem; }
   .refresh-control { gap: 6px; }
   .update-label { max-width: 146px; }
   .main-content { padding-inline: 16px; }
